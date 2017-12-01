@@ -7,17 +7,23 @@ using DetailedOperatorServicesCore;
 
 namespace Rostelecom
 {
+    public class CallBackResult
+    {
+        public bool Result;
+        public DateTime Period;
+    }
+
     public class Rostelecom : IDisposable
     {
         public static string Name = "Rostelecom";
 
-        public delegate void CallBackHandler(bool result);
+        public delegate void CallBackHandler(CallBackResult result);
         private CallBackHandler resultListener;
 
         private Thread classThread;
 
         //Асинхронный метод, передающий результат в вызывающий класс
-        private bool CallBack(bool result)
+        private CallBackResult CallBack(CallBackResult result)
         {
             return result;
         }
@@ -32,9 +38,18 @@ namespace Rostelecom
 
         private void _Parse(object obj)
         {
-            bool result = false;
+            CallBackResult result = new CallBackResult();
 
-            //TODO:
+            try
+            {
+                List<List<object>> data = (List<List<object>>)obj;
+
+
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine(e);
+            }
 
             resultListener?.Invoke(result);
         }
