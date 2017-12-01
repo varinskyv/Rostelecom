@@ -46,25 +46,36 @@ namespace Rostelecom
         {
             CallBackResult result = new CallBackResult();
 
-            try
-            {
+            //try
+            //{
                 List<List<object>> data = (List<List<object>>)obj;
 
                 result.StartPeriodDate = GetStartPeriodDate(data);
-            }
-            catch(Exception e)
-            {
-                Console.WriteLine(e);
-            }
+            //}
+            //catch(Exception e)
+            //{
+            //    Console.WriteLine(e);
+            //}
 
             resultListener?.Invoke(result);
         }
 
         private DateTime GetStartPeriodDate(List<List<object>> data)
         {
-            data.Find(item => item.Contains(cel => ((string)cel).ToUpper.Equals(Period_Tag.ToUpper())));
+            List<object> periodRow = data.Find(item => item.Find(row => Convert.ToString(row).Contains(Period_Tag)) != null);
 
-            return new DateTime(); //TODO:
+            string periodStr = (string)periodRow.Find(item => Convert.ToString(item).Contains(Period_Tag));
+
+            string startDate = "";
+            int i = periodStr.IndexOf(Period_Tag) + Period_Tag.Length + 1;
+            while(!periodStr[i].Equals(' '))
+            {
+                startDate += periodStr[i];
+
+                i++;
+            }
+
+            return DateTime.Parse(startDate);
         }
 
         public void Dispose()
