@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using DetailedOperatorServicesCore;
 using System.Globalization;
@@ -43,20 +41,26 @@ namespace Rostelecom
         private static string Internet_Tag = "Передача данных";
         private static string[] Internet_Headder = { "Тип вызова", "Интернет адрес", "Время начала", "Объем(байт)", "Стоимость (руб)" };
         private static string[] Internet_Fields = { "0", "2", "1", "4", "3" }; 
-        private static string[] Internet_GPRS_Tags = "GPRS-Интернет";
-        private static string[] Internet_WAP_Tags = "WAP-Интернет";
+        private static string[] Internet_GPRS_Tags = { "GPRS-Интернет" };
+        private static string[] Internet_WAP_Tags = { "WAP-Интернет" };
 
         private static string SMS_Tag = "SMS";
         private static string[] SMS_Headder = { "Дата", "Время", "Услуга", "Телефон", "Количество", "Стоимость (руб)" };
         private static string[] SMS_Fields = { "2", "0 1", "3", "5", "4" };
-        private static string[] SMS_Incoming_Tags = "Входящее СМС";
-        private static string[] SMS_Outgoing_Tags = "Исх.СМС";
+        private static string[] SMS_Incoming_Tags = { "Входящее СМС" };
+        private static string[] SMS_Outgoing_Tags = { "Исх.СМС" };
+
+        private static string MMS_Tag = "MMS";
+        private static string[] MMS_Headder = { "Дата", "Время", "Услуга", "Телефон", "Количество", "Стоимость (руб)" };
+        private static string[] MMS_Fields = { "2", "0 1", "3", "5", "4" };
+        private static string[] MMS_Incoming_Tags = { "Входящее ММС" };
+        private static string[] MMS_Outgoing_Tags = { "Исх.ММС" };
 
         private static string Phone_Tag = " Телефония";
         private static string[] Phone_Headder = { "Дата", "Время", "Услуга", "Телефон", "Длительность (сек)", "Стоимость (руб)" };
         private static string[] Phone_Fields = { "2", "0 1", "3", "5", "4" };
-        private static string[] Phone_Incoming_Tags = "Вход";
-        private static string[] Phone_Outgoing_Tags = "Исх.";
+        private static string[] Phone_Incoming_Tags = { "Вход" };
+        private static string[] Phone_Outgoing_Tags = { "Исх.", "Экстренные оперативные службы" };
 
         private static string End_Unit_Tag = "Итого";
 
@@ -83,7 +87,7 @@ namespace Rostelecom
         {
             CallBackResult result = new CallBackResult();
 
-            //try
+            try
             {
                 List<List<object>> data = (List<List<object>>)obj;
 
@@ -171,6 +175,32 @@ namespace Rostelecom
                                     }
                                 }
 
+                                if (data[i].Find(cell => Convert.ToString(cell).Contains(MMS_Tag)) != null)
+                                {
+                                    i++;
+                                    while (i < data.Count)
+                                    {
+                                        if (FindHeadder(data[i], MMS_Headder) == true)
+                                            break;
+
+                                        i++;
+                                    }
+
+                                    i++;
+                                    while (i < data.Count)
+                                    {
+                                        if (data[i].Find(cell => Convert.ToString(cell).Contains(End_Unit_Tag)) != null)
+                                            break;
+
+                                        Connection connection = GetConnection(data[i], DataType.MMS);
+
+                                        if (connection != null)
+                                            lBase.AddConnection(subscriber.Id, connection);
+
+                                        i++;
+                                    }
+                                }
+
                                 if (data[i].Find(cell => Convert.ToString(cell).Contains(Phone_Tag)) != null)
                                 {
                                     i++;
@@ -207,10 +237,10 @@ namespace Rostelecom
 
                 result.Result = true;
             }
-            //catch(Exception e)
-            //{
-            //    Console.WriteLine(e);
-            //}
+            catch(Exception e)
+            {
+                Console.WriteLine(e);
+            }
 
             lBase.Commit();
 
@@ -296,7 +326,7 @@ namespace Rostelecom
                     break;
 
                 case DataType.MMS:
-                    //fields = MMS_Fields;
+                    fields = MMS_Fields;
                     break;
 
                 case DataType.Phone:
@@ -307,7 +337,7 @@ namespace Rostelecom
             if (row.Count < fields.Length)
                 return result;
 
-            //try
+            try
             {
                 result = new Connection();
 
@@ -317,39 +347,67 @@ namespace Rostelecom
                 {
                     case DataType.Intertet:
                         {
-                            if (cell.Contains(Internet_GPRS_Tag))
+                            if (SetConnectionType(cell, Internet_GPRS_Tags))
+                            {
                                 result.Type = ConnectionType.GPRS;
-                            else if (cell.Contains(Internet_WAP_Tag))
+                                break;
+                            }
+
+                            if (SetConnectionType(cell, Internet_WAP_Tags))
+                            {
                                 result.Type = ConnectionType.WAP;
-                            else
-                                result.Type = ConnectionType.OtherInternet;
+                                break;
+                            }
+
+                            result.Type = ConnectionType.OtherInternet;
                         }
                         break;
 
                     case DataType.SMS:
                         {
-                            if (cell.Contains(SMS_Incoming_Tag))
+                            if (SetConnectionType(cell, SMS_Incoming_Tags))
+                            {
                                 result.Type = ConnectionType.IncomingSMS;
-                            else if (cell.Contains(SMS_Outgoing_Tag))
+                                break;
+                            }
+
+                            if (SetConnectionType(cell, SMS_Outgoing_Tags))
+                            {
                                 result.Type = ConnectionType.OutgoingSMS;
+                                break;
+                            }
                         }
                         break;
 
                     case DataType.MMS:
-                        //{
-                        //    if (cell.Contains(MMS_Incoming_Tag))
-                        //        result.Type = ConnectionType.IncomingMMS;
-                        //    else if (cell.Contains(MMS_Outgoing_Tag))
-                        //        result.Type = ConnectionType.OutgoingMMS;
-                        //}
+                        {
+                            if (SetConnectionType(cell, MMS_Incoming_Tags))
+                            {
+                                result.Type = ConnectionType.IncomingMMS;
+                                break;
+                            }
+
+                            if (SetConnectionType(cell, MMS_Outgoing_Tags))
+                            {
+                                result.Type = ConnectionType.OutgoingMMS;
+                                break;
+                            }
+                        }
                         break;
 
                     case DataType.Phone:
                         {
-                            if (cell.Contains(Phone_Incoming_Tag))
+                            if (SetConnectionType(cell, Phone_Incoming_Tags))
+                            {
                                 result.Type = ConnectionType.IncomingCall;
-                            else if (cell.Contains(Phone_Outgoing_Tag))
+                                break;
+                            }
+
+                            if (SetConnectionType(cell, Phone_Outgoing_Tags))
+                            {
                                 result.Type = ConnectionType.OutgoingCall;
+                                break;
+                            }
                         }
                         break;
                 }
@@ -366,14 +424,28 @@ namespace Rostelecom
                 cell = GetCell(row, fields[4]);
                 result.Value = Convert.ToInt32(cell);
             }
-            //catch (Exception e)
-            //{
-            //    result = null;
+            catch (Exception e)
+            {
+                result = null;
 
-            //    Console.WriteLine(e);
-            //}
+                Console.WriteLine(e);
+            }
 
             return result;
+        }
+
+        private bool SetConnectionType(string cell, string[] tags)
+        {
+            int i = 0;
+            while (i < tags.Length)
+            {
+                if (cell.Contains(tags[i]))
+                    return true;
+
+                i++;
+            }
+
+            return false;
         }
 
         private string GetCell(List<object> row, string field)
