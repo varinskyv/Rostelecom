@@ -25,15 +25,39 @@ namespace Rostelecom
 
         private LocalBase lBase;
 
+        private enum DataType
+        {
+            Intertet,
+            SMS,
+            MMS,
+            Phone
+        }
+
+        private static string Stop_Sheet_Tag = "Sheet2";
+
         private static string Period_Tag = "за период с";
+
         private static string Subscriber_Start_Tag = "абонент Тел";
         private static string Subscriber_End_Tag = "Всего по абоненту";
+
         private static string Internet_Tag = "Передача данных";
         private static string[] Internet_Headder = { "Тип вызова", "Интернет адрес", "Время начала", "Объем(байт)", "Стоимость (руб)" };
-        private static string Internet_GPRS_Tag = "GPRS-Интернет";
-        private static string Internet_WAP_Tag = "WAP-Интернет";
-        private static string SMS_Tag = "Прием SMS";
-        private static string Phone_Tag = " Телефония исходящая";
+        private static string[] Internet_Fields = { "0", "2", "1", "4", "3" }; 
+        private static string[] Internet_GPRS_Tags = "GPRS-Интернет";
+        private static string[] Internet_WAP_Tags = "WAP-Интернет";
+
+        private static string SMS_Tag = "SMS";
+        private static string[] SMS_Headder = { "Дата", "Время", "Услуга", "Телефон", "Количество", "Стоимость (руб)" };
+        private static string[] SMS_Fields = { "2", "0 1", "3", "5", "4" };
+        private static string[] SMS_Incoming_Tags = "Входящее СМС";
+        private static string[] SMS_Outgoing_Tags = "Исх.СМС";
+
+        private static string Phone_Tag = " Телефония";
+        private static string[] Phone_Headder = { "Дата", "Время", "Услуга", "Телефон", "Длительность (сек)", "Стоимость (руб)" };
+        private static string[] Phone_Fields = { "2", "0 1", "3", "5", "4" };
+        private static string[] Phone_Incoming_Tags = "Вход";
+        private static string[] Phone_Outgoing_Tags = "Исх.";
+
         private static string End_Unit_Tag = "Итого";
 
         public Rostelecom()
@@ -65,9 +89,14 @@ namespace Rostelecom
 
                 result.StartPeriodDate = GetStartPeriodDate(data);
 
+                lBase.Transaction();
+
                 int i = 0;
-                while(!((string)data[i][0]).Equals("Sheet2") && i < data.Count)
+                while(i < data.Count)
                 {
+                    if (((string)data[i][0]).Equals(Stop_Sheet_Tag))
+                        break;
+
                     if (data[i].Find(cell => Convert.ToString(cell).Contains(Subscriber_Start_Tag)) != null)
                     {
                         Subscriber subscriber = new Subscriber()
@@ -85,18 +114,29 @@ namespace Rostelecom
                                 continue;
 
                             i++;
-                            while (data[i].Find(cell => Convert.ToString(cell).Contains(Subscriber_End_Tag)) == null && i < data.Count)
+                            while (i < data.Count)
                             {
+                                if (data[i].Find(cell => Convert.ToString(cell).Contains(Subscriber_End_Tag)) != null)
+                                    break;
+
                                 if (data[i].Find(cell => Convert.ToString(cell).Contains(Internet_Tag)) != null)
                                 {
                                     i++;
-                                    while (FindHeadder(data[i], Internet_Headder) != true && i < data.Count)
+                                    while (i < data.Count)
+                                    {
+                                        if (FindHeadder(data[i], Internet_Headder) == true)
+                                            break;
+
                                         i++;
+                                    }
 
                                     i++;
-                                    while (data[i].Find(cell => Convert.ToString(cell).Contains(End_Unit_Tag)) == null && i < data.Count)
+                                    while (i < data.Count)
                                     {
-                                        Connection connection = GetInternetConnection(data[i], Internet_Headder.Length);
+                                        if (data[i].Find(cell => Convert.ToString(cell).Contains(End_Unit_Tag)) != null)
+                                            break;
+
+                                        Connection connection = GetConnection(data[i], DataType.Intertet);
 
                                         if (connection != null)
                                             lBase.AddConnection(subscriber.Id, connection);
@@ -105,8 +145,58 @@ namespace Rostelecom
                                     }
                                 }
 
-                                //
+                                if (data[i].Find(cell => Convert.ToString(cell).Contains(SMS_Tag)) != null)
+                                {
+                                    i++;
+                                    while (i < data.Count)
+                                    {
+                                        if (FindHeadder(data[i], SMS_Headder) == true)
+                                            break;
 
+                                        i++;
+                                    }
+
+                                    i++;
+                                    while (i < data.Count)
+                                    {
+                                        if (data[i].Find(cell => Convert.ToString(cell).Contains(End_Unit_Tag)) != null)
+                                            break;
+
+                                        Connection connection = GetConnection(data[i], DataType.SMS);
+
+                                        if (connection != null)
+                                            lBase.AddConnection(subscriber.Id, connection);
+
+                                        i++;
+                                    }
+                                }
+
+                                if (data[i].Find(cell => Convert.ToString(cell).Contains(Phone_Tag)) != null)
+                                {
+                                    i++;
+                                    while (i < data.Count)
+                                    {
+                                        if (FindHeadder(data[i], Phone_Headder) == true)
+                                            break;
+
+                                        i++;
+                                    }
+
+                                    i++;
+                                    while (i < data.Count)
+                                    {
+                                        if (data[i].Find(cell => Convert.ToString(cell).Contains(End_Unit_Tag)) != null)
+                                            break;
+
+                                        Connection connection = GetConnection(data[i], DataType.Phone);
+
+                                        if (connection != null)
+                                            lBase.AddConnection(subscriber.Id, connection);
+
+                                        i++;
+                                    }
+                                }
+                                
                                 i++;
                             }
                         }
@@ -121,6 +211,8 @@ namespace Rostelecom
             //{
             //    Console.WriteLine(e);
             //}
+
+            lBase.Commit();
 
             resultListener?.Invoke(result);
         }
@@ -143,9 +235,9 @@ namespace Rostelecom
             return DateTime.Parse(startDate);
         }
 
-        private string GetString(List<object> list, string tag)
+        private string GetString(List<object> row, string tag)
         {
-            return (string)list.Find(item => Convert.ToString(item).Contains(tag));
+            return (string)row.Find(item => Convert.ToString(item).Contains(tag));
         }
 
         private string GetSubscriberNumber(List<object> row)
@@ -167,17 +259,17 @@ namespace Rostelecom
             return result; 
         }
 
-        private bool FindHeadder(List<object> list, string[] headder)
+        private bool FindHeadder(List<object> row, string[] headder)
         {
             bool result = false;
 
-            if (headder.Length > list.Count)
+            if (headder.Length > row.Count)
                 return result;
 
             int i = 0;
             while (i < headder.Length)
             {
-                if (headder[i].Equals((string)list[i]))
+                if (((string)row[i]).Contains(headder[i]))
                     result = true;
                 else
                     result = false;
@@ -188,35 +280,210 @@ namespace Rostelecom
             return result;
         }
 
-        private Connection GetInternetConnection(List<object> list, int length)
+        private Connection GetConnection(List<object> row, DataType dataType)
         {
             Connection result = null;
 
-            if (list.Count < length)
+            string[] fields = null;
+            switch (dataType)
+            {
+                case DataType.Intertet:
+                    fields = Internet_Fields;
+                    break;
+
+                case DataType.SMS:
+                    fields = SMS_Fields;
+                    break;
+
+                case DataType.MMS:
+                    //fields = MMS_Fields;
+                    break;
+
+                case DataType.Phone:
+                    fields = Phone_Fields;
+                    break;
+            }
+
+            if (row.Count < fields.Length)
                 return result;
 
-            try
+            //try
             {
                 result = new Connection();
 
-                if (Convert.ToString(list[0]).Replace(" ","").Equals(Internet_GPRS_Tag))
-                    result.Type = ConnectionType.GPRS;
-                else
-                    result.Type = ConnectionType.WAP;
+                string cell = GetCell(row, fields[0]);
 
-                result.IOTarget = Convert.ToString(list[1]).Replace(" ", "");
-                result.Date = DateTime.Parse(Convert.ToString(list[2]));
-                result.Value = Convert.ToInt32(list[3]);
-                result.Cost = Decimal.Parse(Convert.ToString(list[4]), NumberStyles.Currency, CultureInfo.InvariantCulture); ;
-            }
-            catch(Exception e)
-            {
-                result = null;
+                switch (dataType)
+                {
+                    case DataType.Intertet:
+                        {
+                            if (cell.Contains(Internet_GPRS_Tag))
+                                result.Type = ConnectionType.GPRS;
+                            else if (cell.Contains(Internet_WAP_Tag))
+                                result.Type = ConnectionType.WAP;
+                            else
+                                result.Type = ConnectionType.OtherInternet;
+                        }
+                        break;
 
-                Console.WriteLine(e);
+                    case DataType.SMS:
+                        {
+                            if (cell.Contains(SMS_Incoming_Tag))
+                                result.Type = ConnectionType.IncomingSMS;
+                            else if (cell.Contains(SMS_Outgoing_Tag))
+                                result.Type = ConnectionType.OutgoingSMS;
+                        }
+                        break;
+
+                    case DataType.MMS:
+                        //{
+                        //    if (cell.Contains(MMS_Incoming_Tag))
+                        //        result.Type = ConnectionType.IncomingMMS;
+                        //    else if (cell.Contains(MMS_Outgoing_Tag))
+                        //        result.Type = ConnectionType.OutgoingMMS;
+                        //}
+                        break;
+
+                    case DataType.Phone:
+                        {
+                            if (cell.Contains(Phone_Incoming_Tag))
+                                result.Type = ConnectionType.IncomingCall;
+                            else if (cell.Contains(Phone_Outgoing_Tag))
+                                result.Type = ConnectionType.OutgoingCall;
+                        }
+                        break;
+                }
+
+                cell = GetCell(row, fields[1]);
+                result.Date = DateTime.Parse(cell);
+
+                cell = GetCell(row, fields[2]);
+                result.IOTarget = cell.Replace(" ", "");
+
+                cell = GetCell(row, fields[3]);
+                result.Cost = Decimal.Parse(cell, NumberStyles.Currency, CultureInfo.InvariantCulture);
+
+                cell = GetCell(row, fields[4]);
+                result.Value = Convert.ToInt32(cell);
             }
+            //catch (Exception e)
+            //{
+            //    result = null;
+
+            //    Console.WriteLine(e);
+            //}
 
             return result;
+        }
+
+        private string GetCell(List<object> row, string field)
+        {
+            int index = 0;
+            if (int.TryParse(field, out index))
+            {
+                return Convert.ToString(row[index]);
+            }
+            else
+            {
+                int[] indices = null;
+                string[] splits = null;
+                ParseField(field, out indices, out splits);
+
+                string result = "";
+                int i = 0;
+                if (indices.Length >= splits.Length)
+                {
+                    while (i < indices.Length)
+                    {
+                        result += Convert.ToString(row[indices[i]]);
+
+                        if (i < splits.Length)
+                            result += splits[i];
+
+                        i++;
+                    }
+                }
+                else
+                {
+                    while (i < splits.Length)
+                    {
+                        result += splits[i];
+
+                        if (i < indices.Length)
+                            result += Convert.ToString(row[indices[i]]);
+
+                        i++;
+                    }
+                }
+
+                return result;
+            }
+        }
+
+        private void ParseField(string field, out int[] indices, out string[] splits)
+        {
+            int[] i = new int[0];
+            string[] s = new string[0];
+
+            bool isNotIndexFirst;
+            if (Char.IsDigit(field[0]))
+                isNotIndexFirst = false;
+            else
+                isNotIndexFirst = true;
+
+            int n = 0;
+            string index = "";
+            string split = "";
+            while(n < field.Length)
+            {
+                if (Char.IsDigit(field[n]))
+                {
+                    index += field[n];
+
+                    if (!String.IsNullOrEmpty(split))
+                    {
+                        Array.Resize(ref s, s.Length + 1);
+                        s[s.Length - 1] = split;
+
+                        split = "";
+                    }
+                }
+                else
+                {
+                    split += field[n];
+
+                    if (!String.IsNullOrEmpty(index))
+                    {
+                        Array.Resize(ref i, i.Length + 1);
+                        i[i.Length - 1] = Convert.ToInt32(index);
+
+                        index = "";
+                    }
+                }
+
+                n++;
+            }
+
+            if (!String.IsNullOrEmpty(index))
+            {
+                Array.Resize(ref i, i.Length + 1);
+                i[i.Length - 1] = Convert.ToInt32(index);
+            }
+
+            if (!String.IsNullOrEmpty(split))
+            {
+                Array.Resize(ref s, s.Length + 1);
+                s[s.Length - 1] = split;
+            }
+
+            if (isNotIndexFirst)
+            {
+                Array.Resize(ref s, s.Length + 1);
+                s[s.Length - 1] = "";
+            }
+
+            indices = i;
+            splits = s;
         }
 
         public void Dispose()
